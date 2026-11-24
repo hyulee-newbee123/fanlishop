@@ -14,6 +14,7 @@
     query: "",
     onlySelected: false,
   };
+  const detailOpen = new Set();
 
   const desk = window.matchMedia("(min-width: 1100px)");
   let toastTimer = 0;
@@ -118,13 +119,33 @@
     }).join("");
   }
 
+  function detailMarkup(item) {
+    if (!item.detail) return { name: `<span class="name-text">${esc(item.name)}</span>`, panel: "" };
+    const open = detailOpen.has(item.id);
+    const stats = item.detail.stats.map((line) => `<li>${esc(line)}</li>`).join("");
+    const effect = item.detail.effect ? `<p class="item-effect">${esc(item.detail.effect)}</p>` : "";
+    const uncertain = item.detail.uncertain ? " is-uncertain" : "";
+    return {
+      name: `<button type="button" class="name-toggle" data-act="stats" data-id="${item.id}" aria-expanded="${open ? "true" : "false"}" aria-controls="stats-${item.id}">
+        <span class="name-caret" aria-hidden="true"></span>
+        <span class="name-text">${esc(item.name)}</span>
+      </button>`,
+      panel: `<div class="item-stats${uncertain}" id="stats-${item.id}" ${open ? "" : "hidden"}>
+        <ul>${stats}</ul>
+        ${effect}
+      </div>`,
+    };
+  }
+
   function rowTemplate(item) {
     const maxBtn = item.limit == null || item.limit > 1
       ? `<button type="button" class="max-btn" data-act="max" data-id="${item.id}">买满</button>`
       : `<span class="max-btn max-btn-slot" aria-hidden="true">买满</span>`;
     const limitText = item.limit == null ? "不限购" : format(item.limit);
-    return `<article class="item cols" data-id="${item.id}">
-      <div class="item-name"><span class="name-text">${esc(item.name)}</span><span class="tag"></span></div>
+    const detail = detailMarkup(item);
+    const open = detailOpen.has(item.id) ? " is-open" : "";
+    return `<article class="item cols${open}" data-id="${item.id}">
+      <div class="item-name">${detail.name}<span class="tag"></span></div>
       <div class="item-price">${format(item.price)}</div>
       <div class="item-limit">${limitText}</div>
       <div class="item-step">
@@ -136,6 +157,7 @@
         ${maxBtn}
       </div>
       <div class="item-sub">0</div>
+      ${detail.panel}
     </article>`;
   }
 
@@ -448,10 +470,27 @@
     $("#clear-btn").addEventListener("click", clearSelection);
     $("#toast-undo").addEventListener("click", undoClear);
 
+    function toggleDetail(id) {
+      if (detailOpen.has(id)) detailOpen.delete(id);
+      else detailOpen.add(id);
+      const row = document.querySelector(`.item[data-id="${CSS.escape(id)}"]`);
+      if (!row) return;
+      const open = detailOpen.has(id);
+      row.classList.toggle("is-open", open);
+      const panel = row.querySelector(".item-stats");
+      const toggle = row.querySelector("[data-act='stats']");
+      if (panel) panel.hidden = !open;
+      if (toggle) toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+
     document.addEventListener("click", (event) => {
       const btn = event.target.closest("[data-act]");
       if (!btn || btn.disabled) return;
       const id = btn.dataset.id;
+      if (btn.dataset.act === "stats") {
+        toggleDetail(id);
+        return;
+      }
       const item = itemById[id];
       if (!item) return;
       const current = state.qty[id] || 0;
